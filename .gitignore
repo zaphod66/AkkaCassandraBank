@@ -3,6 +3,7 @@
 dist
 .cache
 /.idea
+/akka-cassandra-bank/.idea
 /*.iml
 /out
 /.idea_modules
