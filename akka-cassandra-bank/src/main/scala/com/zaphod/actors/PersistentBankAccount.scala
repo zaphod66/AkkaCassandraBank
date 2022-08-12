@@ -1,12 +1,12 @@
 package com.zaphod.actors
 
-import akka.actor.typed.ActorRef
-import akka.persistence.typed.scaladsl.Effect
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.persistence.typed.PersistenceId
+import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
-import java.lang
 import scala.util.{Failure, Success, Try}
 
-class PersistentBankAccount {
+object PersistentBankAccount {
 
   sealed trait Command
   object Command {
@@ -57,4 +57,18 @@ class PersistentBankAccount {
       case GetBankAccount(_, replyTo) =>
         Effect.reply(replyTo)(GetBankAccountResponse(Some(state)))
     }
+
+  val eventHandler: (BankAccount, Event) => BankAccount = (state, event) =>
+    event match {
+      case BankAccountCreated(bankAccount) => bankAccount
+      case BalanceUpdated(amount) => state.copy(balance = state.balance + amount)
+    }
+
+  def apply(id: String): Behavior[Command] =
+    EventSourcedBehavior[Command, Event, BankAccount](
+      persistenceId = PersistenceId.ofUniqueId(id),
+      emptyState = BankAccount(id, "", "", 0.0),
+      commandHandler = commandHandler,
+      eventHandler = eventHandler
+    )
 }
