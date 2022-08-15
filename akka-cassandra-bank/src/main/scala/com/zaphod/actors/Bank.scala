@@ -1,9 +1,11 @@
 package com.zaphod.actors
 
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.NotUsed
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior, Scheduler}
 import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
+import akka.util.Timeout
 
 import java.util.UUID
 import scala.util.Failure
@@ -61,5 +63,37 @@ object Bank {
       commandHandler = commandHandler(context),
       eventHandler = eventHandler(context)
     )
+  }
+}
+
+object BankPlayground {
+  import PersistentBankAccount.Command._, PersistentBankAccount.Response._
+
+  def main(array: Array[String]): Unit = {
+    val rootBehavior: Behavior[NotUsed] = Behaviors.setup { context =>
+      val bank = context.spawn(Bank(), "DemoBank")
+
+      import akka.actor.typed.scaladsl.AskPattern._
+      import scala.concurrent.duration._
+      import scala.concurrent.ExecutionContext
+
+      implicit val timeOut: Timeout = Timeout(2.seconds)
+      implicit val scheduler: Scheduler = context.system.scheduler
+      implicit val ec: ExecutionContext = context.executionContext
+
+      bank.ask(replyTo => CreateBankAccount("zaphod", "EUR", 10, replyTo)). flatMap {
+        case BankAccountCreatedResponse(id) =>
+          context.log.info(s"successfully created bank account $id")
+          bank.ask(replyTo => GetBankAccount(id, replyTo))
+      }.foreach {
+        case GetBankAccountResponse(maybeBankAccount) =>
+          context.log.info(s"Account details: $maybeBankAccount")
+      }
+
+      Behaviors.empty
+    }
+
+    val system = ActorSystem(rootBehavior, "DemoSystem")
+
   }
 }
